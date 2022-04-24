@@ -318,3 +318,17 @@ impl<T> Vec<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Vec;
+
+    #[test]
+    fn push_and_pop() {
+        let mut vec = Vec::new();
+        vec.push(String::from("a"));
+        vec.push(String::from("b"));
+        assert_eq!(vec.pop(), Some(String::from("b")));
+        assert_eq!(vec.pop(), Some(String::from("a")));
+    }
+}

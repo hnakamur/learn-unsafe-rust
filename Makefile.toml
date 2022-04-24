@@ -1,0 +1,10 @@
+[tasks.test-leak]
+condition = { channels = [
+    "nightly",
+], fail_message = "needs to be run with \"cargo +nightly\" instead of \"cargo\"." }
+env = { "RUSTFLAGS" = "-Z sanitizer=leak" }
+command = "cargo"
+args = ["test", "--", "--nocapture", "--color=always"]
+
+[config]
+reduce_output = false # print fail_message
