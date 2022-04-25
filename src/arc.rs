@@ -78,3 +78,16 @@ impl<T> Drop for Arc<T> {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn slice() {
+        let a: Arc<[u32; 3]> = Arc::new([3, 2, 1]);
+        let b = a.clone();
+        assert_eq!(&[3, 2, 1], b.deref());
+        let c = a.clone();
+        assert_eq!(&[3, 2, 1], c.deref());
+    }
+}
