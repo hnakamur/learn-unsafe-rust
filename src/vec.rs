@@ -117,22 +117,29 @@ unsafe impl<T: Sync> Sync for RawVec<T> {}
 
 impl<T> RawVec<T> {
     fn new() -> Self {
-        assert!(mem::size_of::<T>() != 0, "TODO: implement ZST support");
+        // !0 is usize::MAX. This branch should be stripped at compile time.
+        let cap = if mem::size_of::<T>() == 0 { !0 } else { 0 };
+
+        // `NonNull::dangling()` doubles as "unallocated" and "zero-sized allocation"
         RawVec {
             ptr: NonNull::dangling(),
-            cap: 0,
+            cap: cap,
             _marker: PhantomData,
         }
     }
 
     fn grow(&mut self) {
+        // since we set the capacity to usize::MAX when T has size 0,
+        // getting to here necessarily means the Vec is overfull.
+        assert!(mem::size_of::<T>() != 0, "capacity overflow");
+
         let (new_cap, new_layout) = if self.cap == 0 {
             (1, Layout::array::<T>(1).unwrap())
         } else {
-            // This can't overflow because we ensure self.cap() <= isize::MAX.
+            // This can't overflow because we ensure self.cap <= isize::MAX.
             let new_cap = 2 * self.cap;
 
-            // Layout::array checks that the number of bytes is <= usize::MAX,
+            // `Layout::array` checks that the number of bytes is <= usize::MAX,
             // but this is redundant since old_layout.size() <= isize::MAX,
             // so the `unwrap` should never fail.
             let new_layout = Layout::array::<T>(new_cap).unwrap();
@@ -164,10 +171,14 @@ impl<T> RawVec<T> {
 
 impl<T> Drop for RawVec<T> {
     fn drop(&mut self) {
-        if self.cap != 0 {
-            let layout = Layout::array::<T>(self.cap).unwrap();
+        let elem_size = mem::size_of::<T>();
+
+        if self.cap != 0 && elem_size != 0 {
             unsafe {
-                alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
+                alloc::dealloc(
+                    self.ptr.as_ptr() as *mut u8,
+                    Layout::array::<T>(self.cap).unwrap(),
+                );
             }
         }
     }
@@ -186,10 +197,9 @@ impl<T> RawValIter<T> {
     unsafe fn new(slice: &[T]) -> Self {
         RawValIter {
             start: slice.as_ptr(),
-            end: if slice.len() == 0 {
-                // if `len = 0`, then this is not actually allocated memory.
-                // Need to avoid offsetting because that will give wrong
-                // information to LLVM via GEP.
+            end: if mem::size_of::<T>() == 0 {
+                ((slice.as_ptr() as usize) + slice.len()) as *const _
+            } else if slice.len() == 0 {
                 slice.as_ptr()
             } else {
                 slice.as_ptr().add(slice.len())
@@ -249,14 +259,20 @@ impl<T> Iterator for RawValIter<T> {
         } else {
             unsafe {
                 let result = ptr::read(self.start);
-                self.start = self.start.offset(1);
+                self.start = if mem::size_of::<T>() == 0 {
+                    (self.start as usize + 1) as *const _
+                } else {
+                    self.start.offset(1)
+                };
                 Some(result)
             }
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = (self.end as usize - self.start as usize) / mem::size_of::<T>();
+        let elem_size = mem::size_of::<T>();
+        let len =
+            (self.end as usize - self.start as usize) / if elem_size == 0 { 1 } else { elem_size };
         (len, Some(len))
     }
 }
@@ -267,7 +283,11 @@ impl<T> DoubleEndedIterator for RawValIter<T> {
             None
         } else {
             unsafe {
-                self.end = self.end.offset(-1);
+                self.end = if mem::size_of::<T>() == 0 {
+                    (self.end as usize - 1) as *const _
+                } else {
+                    self.end.offset(-1)
+                };
                 Some(ptr::read(self.end))
             }
         }
@@ -321,7 +341,7 @@ impl<T> Vec<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::Vec;
+    use super::*;
 
     #[test]
     fn it_works() {
@@ -333,7 +353,37 @@ mod tests {
         let mut vec = Vec::new();
         vec.push(String::from("a"));
         vec.push(String::from("b"));
-        assert_eq!(vec.pop(), Some(String::from("b")));
-        assert_eq!(vec.pop(), Some(String::from("a")));
+        assert_eq!(Some(String::from("b")), vec.pop());
+        assert_eq!(Some(String::from("a")), vec.pop());
+        assert_eq!(None, vec.pop());
+    }
+
+    #[test]
+    fn iterator() {
+        let mut vec = Vec::new();
+        vec.push(String::from("a"));
+        vec.push(String::from("b"));
+
+        let mut it = vec.iter();
+        assert_eq!(Some(&String::from("a")), it.next());
+        assert_eq!(Some(&String::from("b")), it.next());
+        assert_eq!(None, it.next());
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct Nothing;
+
+    #[test]
+    fn zero_sized_type_iterator() {
+        let mut vec = Vec::new();
+        vec.push(Nothing);
+        vec.push(Nothing);
+        vec.push(Nothing);
+
+        let mut it = vec.into_iter();
+        assert_eq!(Some(Nothing), it.next());
+        assert_eq!(Some(Nothing), it.next());
+        assert_eq!(Some(Nothing), it.next());
+        assert_eq!(None, it.next());
     }
 }
