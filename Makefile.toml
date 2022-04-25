@@ -2,22 +2,11 @@
 command = "cargo"
 args = ["test", "${@}", "--", "--nocapture", "--color=always"]
 
-[tasks.mold-test]
-command = "mold"
-args = ["-run", "cargo", "test", "${@}", "--", "--nocapture", "--color=always"]
-
-[tasks.mold-test-leak]
-condition = { channels = [
-    "nightly",
-], fail_message = "needs to be run with nigtly rust." }
-env = { "RUSTFLAGS" = "-Z sanitizer=leak" }
-command = "mold"
-args = ["-run", "cargo", "test", "${@}", "--", "--nocapture", "--color=always"]
-
 [tasks.test-leak]
 condition = { channels = [
     "nightly",
 ], fail_message = "needs to be run with nightly rust." }
+# env = { "RUSTFLAGS" = "-C link-arg=-fuse-ld=mold -Z sanitizer=leak"  } # causes SIGSEGV
 env = { "RUSTFLAGS" = "-Z sanitizer=leak" }
 command = "cargo"
 args = ["test", "${@}", "--", "--nocapture", "--color=always"]
