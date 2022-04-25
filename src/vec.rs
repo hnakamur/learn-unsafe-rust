@@ -324,6 +324,11 @@ mod tests {
     use super::Vec;
 
     #[test]
+    fn it_works() {
+        println!("It works!");
+    }
+
+    #[test]
     fn push_and_pop() {
         let mut vec = Vec::new();
         vec.push(String::from("a"));

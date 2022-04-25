@@ -1,14 +1,26 @@
 [tasks.test]
+command = "cargo"
+args = ["test", "${@}", "--", "--nocapture", "--color=always"]
+
+[tasks.mold-test]
 command = "mold"
-args = ["-run", "cargo", "test", "--", "--nocapture", "--color=always"]
+args = ["-run", "cargo", "test", "${@}", "--", "--nocapture", "--color=always"]
+
+[tasks.mold-test-leak]
+condition = { channels = [
+    "nightly",
+], fail_message = "needs to be run with nigtly rust." }
+env = { "RUSTFLAGS" = "-Z sanitizer=leak" }
+command = "mold"
+args = ["-run", "cargo", "test", "${@}", "--", "--nocapture", "--color=always"]
 
 [tasks.test-leak]
 condition = { channels = [
     "nightly",
-], fail_message = "needs to be run with \"cargo +nightly\" instead of \"cargo\"." }
+], fail_message = "needs to be run with nightly rust." }
 env = { "RUSTFLAGS" = "-Z sanitizer=leak" }
-command = "mold"
-args = ["-run", "cargo", "test", "--", "--nocapture", "--color=always"]
+command = "cargo"
+args = ["test", "${@}", "--", "--nocapture", "--color=always"]
 
 [config]
 reduce_output = false # print fail_message
